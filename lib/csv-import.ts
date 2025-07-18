@@ -5,10 +5,9 @@ import { z } from 'zod';
 const FormulaCsvRowSchema = z.object({
   'Formula Name': z.string().min(1, 'Formula name is required'),
   'Ingredient': z.string().min(1, 'Ingredient name is required'),
-  'INCI': z.string().optional(),
   'Percentage': z.string().transform((val) => {
-    // Remove % sign and convert to number
-    const cleanVal = val.replace('%', '').trim();
+    // Remove % sign and quotes, then convert to number
+    const cleanVal = val.replace(/["%]/g, '').trim();
     return parseFloat(cleanVal) || 0;
   })
 });
@@ -58,10 +57,7 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
       try {
         const validatedRow = FormulaCsvRowSchema.parse(record);
         
-        // Skip rows with 0% ingredients unless it's a formula without percentages
-        if (validatedRow.Percentage === 0 && validatedRow['Formula Name'] !== 'pH @ 20 °C') {
-          continue;
-        }
+        // Include all rows, even with 0% (some formulas might have trace amounts)
 
         const formulaName = validatedRow['Formula Name'];
         if (!formulaGroups.has(formulaName)) {
@@ -124,14 +120,6 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
 
           if (ingredientResult.rows.length > 0) {
             const ingredientId = ingredientResult.rows[0].id;
-            
-            // Update INCI name if provided
-            if (ingredient.INCI && ingredient.INCI.trim()) {
-              await client.query(
-                'UPDATE ingredients SET inci_name = $1 WHERE id = $2 AND (inci_name IS NULL OR inci_name = \'\')',
-                [ingredient.INCI, ingredientId]
-              );
-            }
 
             await client.query(`
               INSERT INTO formula_ingredients (formula_id, ingredient_id, percentage)
