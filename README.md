@@ -1,80 +1,128 @@
-# Next.js + Fly.io Webhook Template
+# Cosmetics Data Hub
 
-Production-ready webhook service template using Next.js 14 and Fly.io deployment with built-in observability.
+A centralized PostgreSQL database and web application for managing cosmetic laboratory data including formulas, ingredients, and pricing information.
 
-## Features
+## 🎉 Current Features (Working!)
 
-✅ **Next.js 14** with App Router and TypeScript  
-✅ **Fly.io deployment** with auto-scaling  
-✅ **Docker + docker-compose** for local development  
-✅ **Webhook endpoint** with GET/POST handling  
-✅ **Test scripts** for validation  
-✅ **Production observability** with Sentry + Fly.io metrics  
-✅ **Structured logging** with correlation IDs  
-✅ **Template-ready** for any webhook service  
+✅ **PostgreSQL Database Schema** - Complete with formulas, ingredients, relationships, and pricing tables  
+✅ **CSV Import with Preview** - Upload CSV files and see exactly what will be imported before committing  
+✅ **Formula Validation** - Automatic percentage validation with pass/fail indicators  
+✅ **RESTful API** - Complete CRUD operations for formulas and ingredients  
+✅ **Admin Web Interface** - Beautiful Tailwind CSS interface for data management  
+✅ **Real-time Analysis** - See formula counts, ingredient lists, and validation status  
+✅ **Data Safety** - Preview prevents bad imports, validates data integrity  
+✅ **Next.js 14** - Modern React framework with TypeScript  
+✅ **Fly.io Ready** - Configured for cloud deployment  
 
-## Quick Start
+## 🚀 Current Status & Wins
 
-### 1. Use This Template
+### ✨ Just Completed
+- **CSV Preview System** - See exactly what will be imported before committing to database
+- **Formula Validation** - Automatic percentage validation with visual indicators
+- **Flexible CSV Format** - Handles Formula Name, Ingredient, Percentage (no INCI required)
+- **Data Safety** - Preview prevents bad imports and shows validation warnings
+- **Beautiful UI** - Clean admin interface with statistics and formula breakdown
+
+### 🎯 Local Setup (Working!)
 ```bash
-# Clone or use as GitHub template
-git clone https://github.com/ldraney/nextjs-flyio-webhook-template.git my-webhook
-cd my-webhook
-```
-
-### 2. Local Development
-```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Start development server
+# 2. Create PostgreSQL database
+createdb cosmetics_data_hub
+
+# 3. Run migrations
+psql -d cosmetics_data_hub -f db/migrations/001_create_tables.sql
+
+# 4. Start development server
 npm run dev
 # Visit: http://localhost:3005
 
-# Test webhook
-chmod +x scripts/test-webhook.sh
-./scripts/test-webhook.sh
+# 5. Test CSV import
+# Go to http://localhost:3005/admin/import
+# Upload CSV and click "Preview CSV" to see analysis
 ```
 
-### 3. Docker Testing
-```bash
-# Build and run container
-docker-compose up --build
+### 📊 What's Working Right Now
+- **CSV Preview** - Upload your CSV and see formula count, ingredient count, validation status
+- **Formula Analysis** - See which formulas are at 100% vs need review
+- **Admin Dashboard** - Browse formulas and ingredients with search functionality
+- **API Endpoints** - `/api/formulas`, `/api/ingredients`, `/api/import`, `/api/preview`
+- **Database Schema** - Complete with relationships and indexes
 
-# Test containerized version
-./scripts/test-webhook.sh http://localhost:3005
-```
+## 🎯 Next Steps & Roadmap
 
-### 4. Deploy to Fly.io
-```bash
-# Install Fly CLI: https://fly.io/docs/hands-on/install-flyctl/
-# Login: fly auth login
+### 🔥 Immediate Priority
+1. **Formula Status Tracking** - Add "needs_review" vs "approved" status to database
+2. **Local PostgreSQL Testing** - Verify complete data import and validation
+3. **Duplicate Prevention** - Handle re-importing same CSV without data duplication
+4. **Fly.io Deployment** - Get app running in cloud with PostgreSQL instance
 
-# Launch app (choose unique name)
-fly launch
+### 🚀 Short-term Goals
+1. **Formula ID System** - Add stable IDs that persist even if formula names change
+2. **Validation Dashboard** - Visual overview of which formulas need review
+3. **Bulk Formula Actions** - Approve/reject multiple formulas at once
+4. **Import History** - Track when formulas were imported and by whom
 
-# Deploy
-fly deploy
+### 💡 Long-term Vision
+1. **Cloud-First Architecture** - App runs on Fly.io, connects to cloud database
+2. **Hybrid Data Flow** - Local CSV preview → Cloud database update
+3. **Multi-user Support** - Different users can review and approve formulas
+4. **Pricing Integration** - Import supplier pricing data for cost calculations
+5. **API for External Apps** - Other tools can query formula/ingredient data
+6. **Data Versioning** - Track formula changes over time
 
-# Test live deployment
-./scripts/test-webhook.sh https://your-app-name.fly.dev
-```
+### 🛡️ Data Safety Strategy
+- **Preview First** - Always show what will be imported before committing
+- **Upsert Logic** - Update existing formulas instead of creating duplicates
+- **Validation Rules** - Enforce percentage totals and ingredient requirements
+- **Rollback Capability** - Ability to undo imports if needed
+- **Audit Trail** - Log all data changes with timestamps and user info
 
-### 5. Set Up Observability
-```bash
-# Enable error tracking and performance monitoring
-flyctl ext sentry create
+## Database Schema
 
-# View your monitoring dashboard
-flyctl apps errors
+```sql
+-- Core tables for cosmetics data
+CREATE TABLE formulas (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    version VARCHAR(50) DEFAULT '1.0',
+    status VARCHAR(20) DEFAULT 'needs_review',  -- planned: needs_review, approved, rejected
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-# Live tail logs
-flyctl logs
+CREATE TABLE ingredients (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    inci_name VARCHAR(255),
+    supplier_code VARCHAR(100),
+    category VARCHAR(100),
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE formula_ingredients (
+    id SERIAL PRIMARY KEY,
+    formula_id INTEGER REFERENCES formulas(id) ON DELETE CASCADE,
+    ingredient_id INTEGER REFERENCES ingredients(id) ON DELETE CASCADE,
+    percentage DECIMAL(5,2) NOT NULL CHECK (percentage >= 0 AND percentage <= 100),
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(formula_id, ingredient_id)
+);
+
+CREATE TABLE ingredient_pricing (
+    id SERIAL PRIMARY KEY,
+    ingredient_id INTEGER REFERENCES ingredients(id) ON DELETE CASCADE,
+    price_per_kg DECIMAL(10,2) NOT NULL CHECK (price_per_kg >= 0),
+    supplier VARCHAR(255),
+    effective_date DATE NOT NULL,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ## Observability & Monitoring
 
-This template includes production-ready observability out of the box:
+This project includes production-ready observability out of the box:
 
 ### 🚨 Error Tracking (Sentry)
 - **Automatic setup**: `flyctl ext sentry create`
