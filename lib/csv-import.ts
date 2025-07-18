@@ -137,7 +137,7 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
         const ingredientNames = ingredients.map(ing => ing.Ingredient);
         const duplicates = ingredientNames.filter((name, index) => ingredientNames.indexOf(name) !== index);
         if (duplicates.length > 0) {
-          reviewReasons.push(`Duplicate ingredients: ${[...new Set(duplicates)].join(', ')}`);
+          reviewReasons.push(`Duplicate ingredients: ${Array.from(new Set(duplicates)).join(', ')}`);
         }
 
         // Check percentage total
