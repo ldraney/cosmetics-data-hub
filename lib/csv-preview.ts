@@ -1,5 +1,6 @@
 import { parse } from 'csv-parse';
 import { z } from 'zod';
+import pool from './db';
 
 const FormulaCsvRowSchema = z.object({
   'Formula Name': z.string().min(1, 'Formula name is required'),
@@ -23,6 +24,8 @@ export interface FormulaPreview {
   totalPercentage: number;
   isValid: boolean;
   warnings: string[];
+  isNew: boolean;
+  currentStatus?: string;
 }
 
 export interface CsvPreviewResult {
@@ -32,6 +35,8 @@ export interface CsvPreviewResult {
   invalidRows: number;
   formulas: FormulaPreview[];
   uniqueIngredients: string[];
+  newFormulas: number;
+  updatedFormulas: number;
   errors: string[];
   warnings: string[];
 }
@@ -44,6 +49,8 @@ export async function previewCsvImport(csvContent: string): Promise<CsvPreviewRe
     invalidRows: 0,
     formulas: [],
     uniqueIngredients: [],
+    newFormulas: 0,
+    updatedFormulas: 0,
     errors: [],
     warnings: []
   };
@@ -90,8 +97,26 @@ export async function previewCsvImport(csvContent: string): Promise<CsvPreviewRe
       }
     }
 
+    // Get existing formulas from database
+    const existingFormulas = new Map<string, { id: number; status: string }>();
+    try {
+      const formulaNames = Array.from(formulaGroups.keys());
+      if (formulaNames.length > 0) {
+        const existingResult = await pool.query(
+          'SELECT id, name, status FROM formulas WHERE name = ANY($1)',
+          [formulaNames]
+        );
+        
+        for (const row of existingResult.rows) {
+          existingFormulas.set(row.name, { id: row.id, status: row.status });
+        }
+      }
+    } catch (error) {
+      result.warnings.push(`Warning: Could not check existing formulas - ${error}`);
+    }
+
     // Process formulas
-    for (const [formulaName, ingredients] of formulaGroups) {
+    for (const [formulaName, ingredients] of Array.from(formulaGroups.entries())) {
       if (ingredients.length === 0) continue;
 
       const totalPercentage = ingredients.reduce((sum, ing) => sum + ing.Percentage, 0);
@@ -103,6 +128,18 @@ export async function previewCsvImport(csvContent: string): Promise<CsvPreviewRe
         warnings.push(`Total percentage is ${totalPercentage.toFixed(2)}% (under 100%)`);
       }
 
+      const existingFormula = existingFormulas.get(formulaName);
+      const isNew = !existingFormula;
+
+      if (isNew) {
+        result.newFormulas++;
+      } else {
+        result.updatedFormulas++;
+        if (existingFormula.status === 'approved') {
+          warnings.push('Currently approved - will need re-review after import');
+        }
+      }
+
       const formulaPreview: FormulaPreview = {
         name: formulaName,
         ingredients: ingredients.map(ing => ({
@@ -112,7 +149,9 @@ export async function previewCsvImport(csvContent: string): Promise<CsvPreviewRe
         })),
         totalPercentage,
         isValid: totalPercentage >= 99.5 && totalPercentage <= 100.5,
-        warnings
+        warnings,
+        isNew,
+        currentStatus: existingFormula?.status
       };
 
       result.formulas.push(formulaPreview);

@@ -5,6 +5,7 @@ import Link from 'next/link';
 interface ImportResult {
   success: boolean;
   formulasImported: number;
+  formulasUpdated: number;
   ingredientsImported: number;
   errors: string[];
   warnings: string[];
@@ -29,6 +30,8 @@ interface PreviewResult {
   invalidRows: number;
   formulas: FormulaPreview[];
   uniqueIngredients: string[];
+  newFormulas: number;
+  updatedFormulas: number;
   errors: string[];
   warnings: string[];
 }
@@ -73,6 +76,8 @@ export default function ImportPage() {
           invalidRows: 0,
           formulas: [],
           uniqueIngredients: [],
+          newFormulas: 0,
+          updatedFormulas: 0,
           errors: [data.error || 'Failed to preview CSV', ...(data.details ? [data.details] : [])],
           warnings: []
         });
@@ -88,6 +93,8 @@ export default function ImportPage() {
         invalidRows: 0,
         formulas: [],
         uniqueIngredients: [],
+        newFormulas: 0,
+        updatedFormulas: 0,
         errors: [`Network error: ${error instanceof Error ? error.message : 'Failed to preview file'}`],
         warnings: []
       });
@@ -117,6 +124,7 @@ export default function ImportPage() {
       setResult({
         success: false,
         formulasImported: 0,
+        formulasUpdated: 0,
         ingredientsImported: 0,
         errors: ['Network error: Failed to upload file'],
         warnings: []
@@ -194,7 +202,9 @@ export default function ImportPage() {
             </h2>
             
             <div className="space-y-2">
-              <p><strong>Formulas Imported:</strong> {result.formulasImported}</p>
+              <p><strong>New Formulas:</strong> {result.formulasImported}</p>
+              <p><strong>Updated Formulas:</strong> {result.formulasUpdated}</p>
+              <p><strong>Total Formulas:</strong> {result.formulasImported + result.formulasUpdated}</p>
               <p><strong>Ingredients Imported:</strong> {result.ingredientsImported}</p>
             </div>
 
@@ -233,7 +243,7 @@ export default function ImportPage() {
               📊 CSV Preview Results
             </h2>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{preview.totalRows}</div>
                 <div className="text-sm text-gray-600">Total Rows</div>
@@ -243,8 +253,16 @@ export default function ImportPage() {
                 <div className="text-sm text-gray-600">Valid Rows</div>
               </div>
               <div className="text-center">
+                <div className="text-2xl font-bold text-emerald-600">{preview.newFormulas}</div>
+                <div className="text-sm text-gray-600">New Formulas</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-amber-600">{preview.updatedFormulas}</div>
+                <div className="text-sm text-gray-600">Updated Formulas</div>
+              </div>
+              <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">{preview.formulas.length}</div>
-                <div className="text-sm text-gray-600">Formulas</div>
+                <div className="text-sm text-gray-600">Total Formulas</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">{preview.uniqueIngredients.length}</div>

@@ -17,6 +17,7 @@ export type FormulaCsvRow = z.infer<typeof FormulaCsvRowSchema>;
 export interface ImportResult {
   success: boolean;
   formulasImported: number;
+  formulasUpdated: number;
   ingredientsImported: number;
   errors: string[];
   warnings: string[];
@@ -26,6 +27,7 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
   const result: ImportResult = {
     success: false,
     formulasImported: 0,
+    formulasUpdated: 0,
     ingredientsImported: 0,
     errors: [],
     warnings: []
@@ -77,7 +79,7 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
       await client.query('BEGIN');
 
       // Insert ingredients first
-      for (const ingredientName of ingredientSet) {
+      for (const ingredientName of Array.from(ingredientSet)) {
         await client.query(`
           INSERT INTO ingredients (name, inci_name) 
           VALUES ($1, $2) 
@@ -86,27 +88,42 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
       }
 
       // Insert formulas and their ingredients
-      for (const [formulaName, ingredients] of formulaGroups) {
+      for (const [formulaName, ingredients] of Array.from(formulaGroups.entries())) {
         // Skip formulas with no valid ingredients
         if (ingredients.length === 0) {
           continue;
         }
 
-        // Validate percentage total
+        // Validate percentage total and determine status
         const totalPercentage = ingredients.reduce((sum, ing) => sum + ing.Percentage, 0);
+        const isValid = totalPercentage >= 99.5 && totalPercentage <= 100.5;
+        const status = 'needs_review'; // All imported formulas need review initially
+        
         if (totalPercentage > 100.1) {
           result.warnings.push(`Formula "${formulaName}" has total percentage of ${totalPercentage.toFixed(2)}% (over 100%)`);
         }
-
-        // Insert formula
+        
         const formulaResult = await client.query(`
-          INSERT INTO formulas (name) 
-          VALUES ($1) 
-          ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-          RETURNING id
-        `, [formulaName]);
+          INSERT INTO formulas (name, status) 
+          VALUES ($1, $2) 
+          ON CONFLICT (name) DO UPDATE SET 
+            updated_date = CURRENT_TIMESTAMP,
+            status = CASE 
+              WHEN formulas.status = 'approved' THEN 'needs_review'  -- Re-review if formula changed
+              ELSE formulas.status  -- Keep existing status for other cases
+            END
+          RETURNING id, name, status, (xmax = 0) AS is_new_formula
+        `, [formulaName, status]);
 
         const formulaId = formulaResult.rows[0].id;
+        const isNewFormula = formulaResult.rows[0].is_new_formula;
+
+        // Track new vs updated formulas
+        if (isNewFormula) {
+          result.formulasImported++;
+        } else {
+          result.formulasUpdated++;
+        }
 
         // Clear existing ingredients for this formula
         await client.query('DELETE FROM formula_ingredients WHERE formula_id = $1', [formulaId]);
@@ -127,8 +144,6 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
             `, [formulaId, ingredientId, ingredient.Percentage]);
           }
         }
-
-        result.formulasImported++;
       }
 
       result.ingredientsImported = ingredientSet.size;
