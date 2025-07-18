@@ -6,6 +6,7 @@ interface ImportResult {
   success: boolean;
   formulasImported: number;
   formulasUpdated: number;
+  formulasWithIssues: number;
   ingredientsImported: number;
   errors: string[];
   warnings: string[];
@@ -125,6 +126,7 @@ export default function ImportPage() {
         success: false,
         formulasImported: 0,
         formulasUpdated: 0,
+        formulasWithIssues: 0,
         ingredientsImported: 0,
         errors: ['Network error: Failed to upload file'],
         warnings: []
@@ -204,6 +206,7 @@ export default function ImportPage() {
             <div className="space-y-2">
               <p><strong>New Formulas:</strong> {result.formulasImported}</p>
               <p><strong>Updated Formulas:</strong> {result.formulasUpdated}</p>
+              <p><strong>Formulas with Issues:</strong> <span className="text-orange-600">{result.formulasWithIssues}</span></p>
               <p><strong>Total Formulas:</strong> {result.formulasImported + result.formulasUpdated}</p>
               <p><strong>Ingredients Imported:</strong> {result.ingredientsImported}</p>
             </div>

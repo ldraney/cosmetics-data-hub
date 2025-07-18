@@ -18,6 +18,7 @@ export interface ImportResult {
   success: boolean;
   formulasImported: number;
   formulasUpdated: number;
+  formulasWithIssues: number;
   ingredientsImported: number;
   errors: string[];
   warnings: string[];
@@ -28,6 +29,7 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
     success: false,
     formulasImported: 0,
     formulasUpdated: 0,
+    formulasWithIssues: 0,
     ingredientsImported: 0,
     errors: [],
     warnings: []
@@ -128,20 +130,57 @@ export async function importFormulasFromCsv(csvContent: string): Promise<ImportR
         // Clear existing ingredients for this formula
         await client.query('DELETE FROM formula_ingredients WHERE formula_id = $1', [formulaId]);
 
-        // Insert formula ingredients
+        // Analyze formula for review reasons
+        const reviewReasons: string[] = [];
+        
+        // Check for duplicate ingredients
+        const ingredientNames = ingredients.map(ing => ing.Ingredient);
+        const duplicates = ingredientNames.filter((name, index) => ingredientNames.indexOf(name) !== index);
+        if (duplicates.length > 0) {
+          reviewReasons.push(`Duplicate ingredients: ${[...new Set(duplicates)].join(', ')}`);
+        }
+
+        // Check percentage total
+        if (totalPercentage > 100.1) {
+          reviewReasons.push(`Total percentage: ${totalPercentage.toFixed(2)}% (over 100%)`);
+        } else if (totalPercentage < 99.5) {
+          reviewReasons.push(`Total percentage: ${totalPercentage.toFixed(2)}% (under 100%)`);
+        }
+
+        // Update formula with review reasons
+        await client.query(`
+          UPDATE formulas 
+          SET review_reasons = $1 
+          WHERE id = $2
+        `, [reviewReasons, formulaId]);
+
+        // Track formulas with issues
+        if (reviewReasons.length > 0) {
+          result.formulasWithIssues++;
+          result.warnings.push(`Formula "${formulaName}": ${reviewReasons.join(', ')}`);
+        }
+
+        // Insert formula ingredients with error handling
         for (const ingredient of ingredients) {
-          const ingredientResult = await client.query(
-            'SELECT id FROM ingredients WHERE name = $1',
-            [ingredient.Ingredient]
-          );
+          try {
+            const ingredientResult = await client.query(
+              'SELECT id FROM ingredients WHERE name = $1',
+              [ingredient.Ingredient]
+            );
 
-          if (ingredientResult.rows.length > 0) {
-            const ingredientId = ingredientResult.rows[0].id;
+            if (ingredientResult.rows.length > 0) {
+              const ingredientId = ingredientResult.rows[0].id;
 
-            await client.query(`
-              INSERT INTO formula_ingredients (formula_id, ingredient_id, percentage)
-              VALUES ($1, $2, $3)
-            `, [formulaId, ingredientId, ingredient.Percentage]);
+              await client.query(`
+                INSERT INTO formula_ingredients (formula_id, ingredient_id, percentage)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (formula_id, ingredient_id) 
+                DO UPDATE SET percentage = EXCLUDED.percentage
+              `, [formulaId, ingredientId, ingredient.Percentage]);
+            }
+          } catch (ingredientError) {
+            // Don't fail entire import for ingredient issues
+            result.warnings.push(`Formula "${formulaName}" ingredient "${ingredient.Ingredient}": ${ingredientError}`);
           }
         }
       }
