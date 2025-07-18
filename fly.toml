@@ -3,10 +3,11 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'fly-webhook-template'
+app = 'cosmetics-data-hub'
 primary_region = 'sea'
 
 [build]
+  builder = 'paketobuildpacks/builder:base'
 
 [env]
   NODE_ENV = 'production'
